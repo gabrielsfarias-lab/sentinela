@@ -11,7 +11,9 @@ public class UpdateDocumentDto
     public string? DisplayName { get; set; }
 
     public DateTime? ExpiryDate { get; set; } // Permitir definir como nulo para remover a data
+    public bool ExpiryDateHasValue { get; set; } // Indica se o campo foi enviado no PATCH
 
     [MaxLength(1000)]
     public string? Notes { get; set; } // Permitir definir como nulo para limpar as notas
+    public bool NotesHasValue { get; set; } // Indica se o campo foi enviado no PATCH
 }

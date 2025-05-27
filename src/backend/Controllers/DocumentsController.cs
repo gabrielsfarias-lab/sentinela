@@ -142,5 +142,125 @@ public class DocumentsController(
         return Ok(resultDtos);
     }
 
-    // Outros endpoints (PATCH, DELETE) virão depois.
+    // PATCH: /documentos/{id}
+    [HttpPatch("{id}")]
+    public async Task<IActionResult> UpdateDocument(Guid id, [FromBody] UpdateDocumentDto updateDto)
+    {
+        var userId = GetCurrentUserId();
+        if (string.IsNullOrEmpty(userId))
+            return Unauthorized();
+
+        var document = await _context.Documents.FirstOrDefaultAsync(d =>
+            d.Id == id && d.UserId == userId
+        );
+
+        if (document == null)
+        {
+            _logger.LogWarning(
+                "Tentativa de PATCH no documento ID {DocumentId} não encontrado para o usuário {UserId}.",
+                id,
+                userId
+            );
+            return NotFound("Documento não encontrado.");
+        }
+
+        bool changed = false;
+        // Aplicar atualizações apenas para campos fornecidos no DTO
+        if (updateDto.DisplayName != null) // Checa se a propriedade existe no DTO (mesmo que seja string vazia)
+        {
+            document.DisplayName = updateDto.DisplayName;
+            changed = true;
+        }
+        if (updateDto.ExpiryDateHasValue) // Precisamos de uma forma de saber se ExpiryDate foi intencionalmente setado para null
+        {
+            document.ExpiryDate = updateDto.ExpiryDate;
+            changed = true;
+        }
+        if (updateDto.NotesHasValue)
+        {
+            document.Notes = updateDto.Notes;
+            changed = true;
+        }
+        // Adicionar mais campos aqui conforme necessário
+
+        if (changed)
+        {
+            document.UpdatedAt = DateTime.UtcNow;
+            try
+            {
+                await _context.SaveChangesAsync();
+                _logger.LogInformation(
+                    "Documento ID {DocumentId} atualizado para o usuário {UserId}.",
+                    id,
+                    userId
+                );
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                _logger.LogError(
+                    "Erro de concorrência ao atualizar Documento ID {DocumentId} para o usuário {UserId}.",
+                    id,
+                    userId
+                );
+                return Conflict("O documento foi modificado por outra operação. Tente novamente.");
+            }
+        }
+        else
+        {
+            _logger.LogInformation(
+                "Nenhuma alteração detectada para o Documento ID {DocumentId} para o usuário {UserId}.",
+                id,
+                userId
+            );
+            return Ok(new { Message = "Nenhuma alteração aplicada." }); // Ou retornar o documento sem modificação
+        }
+
+        // Retornar o documento atualizado como DTO
+        var updatedDto = new DocumentDto
+        {
+            Id = document.Id,
+            OriginalFileName = document.OriginalFileName,
+            OriginalFileSize = document.OriginalFileSize,
+            OriginalFileLastModified = document.OriginalFileLastModified,
+            DisplayName = document.DisplayName,
+            ExpiryDate = document.ExpiryDate,
+            Notes = document.Notes,
+            CreatedAt = document.CreatedAt,
+            UpdatedAt = document.UpdatedAt,
+        };
+        return Ok(updatedDto);
+    }
+
+    // DELETE: /documentos/{id}
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> DeleteDocument(Guid id)
+    {
+        var userId = GetCurrentUserId();
+        if (string.IsNullOrEmpty(userId))
+            return Unauthorized();
+
+        var document = await _context.Documents.FirstOrDefaultAsync(d =>
+            d.Id == id && d.UserId == userId
+        );
+
+        if (document == null)
+        {
+            _logger.LogWarning(
+                "Tentativa de DELETE no documento ID {DocumentId} não encontrado para o usuário {UserId}.",
+                id,
+                userId
+            );
+            return NotFound("Documento não encontrado.");
+        }
+
+        _context.Documents.Remove(document);
+        await _context.SaveChangesAsync();
+
+        _logger.LogInformation(
+            "Documento ID {DocumentId} excluído para o usuário {UserId}.",
+            id,
+            userId
+        );
+        return NoContent(); // 204 No Content é uma resposta padrão para DELETE bem-sucedido
+    }
 }
