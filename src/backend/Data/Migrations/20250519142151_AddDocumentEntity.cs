@@ -17,15 +17,27 @@ namespace backend.Data.Migrations
                 {
                     Id = table.Column<Guid>(type: "TEXT", nullable: false),
                     UserId = table.Column<string>(type: "TEXT", nullable: false),
-                    OriginalFileName = table.Column<string>(type: "TEXT", maxLength: 260, nullable: false),
-                    OriginalFileType = table.Column<string>(type: "TEXT", maxLength: 100, nullable: true),
+                    OriginalFileName = table.Column<string>(
+                        type: "TEXT",
+                        maxLength: 260,
+                        nullable: false
+                    ),
+                    OriginalFileType = table.Column<string>(
+                        type: "TEXT",
+                        maxLength: 100,
+                        nullable: true
+                    ),
                     OriginalFileSize = table.Column<long>(type: "INTEGER", nullable: true),
                     OriginalFileLastModified = table.Column<DateTime>(type: "TEXT", nullable: true),
-                    DisplayName = table.Column<string>(type: "TEXT", maxLength: 260, nullable: false),
+                    DisplayName = table.Column<string>(
+                        type: "TEXT",
+                        maxLength: 260,
+                        nullable: false
+                    ),
                     ExpiryDate = table.Column<DateTime>(type: "TEXT", nullable: true),
                     Notes = table.Column<string>(type: "TEXT", maxLength: 1000, nullable: true),
                     CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "TEXT", nullable: false)
+                    UpdatedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
                 },
                 constraints: table =>
                 {
@@ -35,20 +47,22 @@ namespace backend.Data.Migrations
                         column: x => x.UserId,
                         principalTable: "AspNetUsers",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
+                        onDelete: ReferentialAction.Cascade
+                    );
+                }
+            );
 
             migrationBuilder.CreateIndex(
                 name: "IX_Documents_UserId",
                 table: "Documents",
-                column: "UserId");
+                column: "UserId"
+            );
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropTable(
-                name: "Documents");
+            migrationBuilder.DropTable(name: "Documents");
         }
     }
 }
