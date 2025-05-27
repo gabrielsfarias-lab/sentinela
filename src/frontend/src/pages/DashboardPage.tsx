@@ -12,88 +12,98 @@ import {
 } from '../services/DocumentService';
 import { useDropzone } from 'react-dropzone';
 
-// Estado para controlar qual célula está em modo de edição
+import { format, parseISO, isValid, parse as parseDateFns } from 'date-fns'; // Renomeado parse para parseDateFns para evitar conflito
+import { toZonedTime, fromZonedTime } from 'date-fns-tz';
+
 interface EditingCell {
   docId: string;
-  field: 'displayName' | 'expiryDate' | 'notes'; // Campos editáveis
+  field: 'displayName' | 'expiryDate' | 'notes';
 }
+
+const BRASILIA_TIME_ZONE = 'America/Sao_Paulo';
 
 const DashboardPage: React.FC = () => {
   const { userEmail, logout, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const [documents, setDocuments] = useState<FeDocumentDto[]>([]);
-  const [isLoading, setIsLoading] = useState(false); // Loading geral para a página/lista
-  const [isSubmitting, setIsSubmitting] = useState(false); // Loading para ações específicas (upload, save, delete)
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [editingCell, setEditingCell] = useState<EditingCell | null>(null);
-  const [editValue, setEditValue] = useState<string>(''); // Valor temporário durante a edição (sempre string para input)
+  const [editValue, setEditValue] = useState<string>('');
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
 
   const fetchDocuments = useCallback(async () => {
     if (!isAuthenticated) return;
-    setIsLoading(true);
-    setError(null);
+    setIsLoading(true); setError(null);
     try {
       const docs = await getDocuments();
       setDocuments(docs);
     } catch (err) {
       console.error("Erro ao buscar documentos:", err);
       setError("Não foi possível carregar os documentos.");
-    } finally {
-      setIsLoading(false);
-    }
+    } finally { setIsLoading(false); }
   }, [isAuthenticated]);
 
-  useEffect(() => {
-    fetchDocuments();
-  }, [fetchDocuments]);
+  useEffect(() => { fetchDocuments(); }, [fetchDocuments]);
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (!acceptedFiles.length) return;
-    setIsSubmitting(true);
-    setError(null);
-
+    setIsSubmitting(true); setError(null);
     const metadataList: FeCreateDocumentDto[] = acceptedFiles.map(file => ({
       originalFileName: file.name,
+      originalFileType: file.type,
       originalFileSize: file.size,
       originalFileLastModified: new Date(file.lastModified).toISOString(),
       displayName: file.name,
     }));
-
     try {
       await createDocumentsMetadata(metadataList);
-      fetchDocuments(); // Recarrega a lista para incluir os novos
+      fetchDocuments();
     } catch (err) {
-      console.error("Erro ao criar metadados de documentos:", err);
-      setError("Falha ao registrar os novos documentos.");
-    } finally {
-      setIsSubmitting(false);
-    }
+      console.error("Erro ao criar metadados:", err);
+      setError("Falha ao registrar novos documentos.");
+    } finally { setIsSubmitting(false); }
   }, [fetchDocuments]);
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    // accept: { 'application/pdf': ['.pdf'], 'image/*': ['.jpeg', '.jpg', '.png'] }
-  });
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop });
+  const handleLogout = () => { logout({ navigate }); };
 
-  const handleLogout = () => {
-    logout({ navigate });
+  const displayFormattedDate = (isoDateString: string | null | undefined): string => {
+    if (!isoDateString) return 'N/A';
+    try {
+      const dateInUtc = parseISO(isoDateString);
+      if (!isValid(dateInUtc)) return 'Data Inv.';
+      const dateInBrasilia = toZonedTime(dateInUtc, BRASILIA_TIME_ZONE);
+      return format(dateInBrasilia, 'dd/MM/yyyy'); // Não precisa de timeZone aqui pois dateInBrasilia já está "zonada"
+    } catch (e) {
+      console.error("Erro ao formatar data para exibição:", isoDateString, e);
+      return 'Data Err.';
+    }
   };
 
   const getUpcomingExpiryDocuments = (days: number = 30): FeDocumentDto[] => {
-    const futureDate = new Date();
-    futureDate.setDate(futureDate.getDate() + days);
-    const today = new Date(); // Para garantir que não mostre os já vencidos como "próximos"
-    today.setHours(0, 0, 0, 0); // Começo do dia de hoje
+    const today = new Date();
+    const brasiliaCurrentTime = toZonedTime(today, BRASILIA_TIME_ZONE); // Hora atual em Brasília
+
+    const startOfTodayBrasilia = new Date(brasiliaCurrentTime.getFullYear(), brasiliaCurrentTime.getMonth(), brasiliaCurrentTime.getDate(), 0, 0, 0);
+    const startOfTodayUtc = fromZonedTime(startOfTodayBrasilia, BRASILIA_TIME_ZONE); // Convertido para UTC
+
+    // Fim do dia X dias no futuro em Brasília
+    const futureDateBrasilia = new Date(brasiliaCurrentTime.getFullYear(), brasiliaCurrentTime.getMonth(), brasiliaCurrentTime.getDate() + days, 23, 59, 59, 999);
+    const endOfFutureDateUtc = fromZonedTime(futureDateBrasilia, BRASILIA_TIME_ZONE); // Convertido para UTC
 
     return documents
       .filter(doc => {
         if (!doc.expiryDate) return false;
-        const expiry = new Date(doc.expiryDate);
-        return expiry >= today && expiry <= futureDate;
+        try {
+          const expiryUtc = parseISO(doc.expiryDate);
+          if (!isValid(expiryUtc)) return false;
+          return expiryUtc >= startOfTodayUtc && expiryUtc <= endOfFutureDateUtc;
+        } catch { return false; }
       })
-      .sort((a, b) => new Date(a.expiryDate!).getTime() - new Date(b.expiryDate!).getTime());
+      .sort((a, b) => parseISO(a.expiryDate!).getTime() - parseISO(b.expiryDate!).getTime());
   };
 
   const upcomingDocuments = getUpcomingExpiryDocuments(30);
@@ -101,10 +111,20 @@ const DashboardPage: React.FC = () => {
   const handleCellDoubleClick = (docId: string, field: EditingCell['field'], currentValue: string | null | undefined) => {
     setEditingCell({ docId, field });
     if (field === 'expiryDate') {
-      // O input type="date" espera "YYYY-MM-DD"
-      setEditValue(currentValue ? new Date(currentValue).toISOString().split('T')[0] : '');
+      if (currentValue) {
+        try {
+          const dateInUtc = parseISO(currentValue);
+          const dateInBrasilia = toZonedTime(dateInUtc, BRASILIA_TIME_ZONE);
+          setEditValue(format(dateInBrasilia, 'yyyy-MM-dd')); // Formato para input type="date"
+        } catch (e) {
+          setEditValue('');
+          console.error("Data inválida (expiryDate) ao iniciar edição:", currentValue, e);
+        }
+      } else {
+        setEditValue('');
+      }
     } else {
-      setEditValue(currentValue ?? ''); // Se null ou undefined, usa string vazia
+      setEditValue(currentValue ?? '');
     }
   };
 
@@ -121,61 +141,68 @@ const DashboardPage: React.FC = () => {
 
   const handleEditSave = async () => {
     if (!editingCell) return;
-
     const { docId, field } = editingCell;
     const originalDocument = documents.find(d => d.id === docId);
+
     if (!originalDocument) {
       setEditingCell(null);
+      setEditValue(''); // Limpa o valor de edição
       return;
     }
 
-    let processedEditValue: string | null = typeof editValue === 'string' ? editValue.trim() : null;
-    let originalFieldValue: string | null | undefined = originalDocument[field];
-
-    const updatePayload: FeUpdateDocumentDto = {};
+    let processedEditValueForApi: string | null | undefined = undefined; // Valor final a ser enviado para a API
+    let originalValueFromDoc: string | null | undefined = originalDocument[field];
     let valueHasChanged = false;
+    const updatePayload: FeUpdateDocumentDto = {};
 
     if (field === 'displayName') {
-      processedEditValue = processedEditValue || originalDocument.originalFileName; // Fallback para nome original se vazio
-      if (originalFieldValue !== processedEditValue) {
-        updatePayload.displayName = processedEditValue;
+      const currentDisplayName = (typeof editValue === 'string' ? editValue.trim() : '') || originalDocument.originalFileName;
+      originalValueFromDoc = originalDocument.displayName; // Pega o valor original específico
+
+      if (originalValueFromDoc !== currentDisplayName) {
+        updatePayload.displayName = currentDisplayName;
         updatePayload.updateDisplayName = true;
         valueHasChanged = true;
       }
     } else if (field === 'expiryDate') {
-      const inputDateValue = processedEditValue; // "YYYY-MM-DD" ou ""
-      let apiDateValue: string | null = null;
+      const inputDateStr = typeof editValue === 'string' ? editValue.trim() : "";
+      originalValueFromDoc = originalDocument.expiryDate ? parseISO(originalDocument.expiryDate).toISOString() : null; // Original como ISO ou null
 
-      if (inputDateValue && inputDateValue.trim() !== '') {
-        const dateObj = new Date(inputDateValue + "T00:00:00Z"); // Adiciona Z para UTC se a data for só YYYY-MM-DD
-        if (!isNaN(dateObj.getTime())) {
-          apiDateValue = dateObj.toISOString();
-        } else {
-          setError("Formato de data inválido.");
-          // Não limpa editingCell para o usuário poder corrigir
+      if (inputDateStr) { // Se o usuário digitou algo
+        try {
+          const parsedDateLocal = parseDateFns(inputDateStr, 'yyyy-MM-dd', new Date());
+          if (!isValid(parsedDateLocal)) throw new Error("Data do input inválida");
+
+          const endOfDayInBrasilia = new Date(parsedDateLocal.getFullYear(), parsedDateLocal.getMonth(), parsedDateLocal.getDate(), 23, 59, 59, 999);
+          processedEditValueForApi = fromZonedTime(endOfDayInBrasilia, BRASILIA_TIME_ZONE).toISOString();
+        } catch (e) {
+          setError("Formato de data inválido. Use YYYY-MM-DD.");
+          console.error("Erro ao parsear data do input:", inputDateStr, e);
+          // Não limpa editingCell aqui para o usuário poder corrigir
           return;
         }
+      } else { // Usuário limpou o campo de data
+        processedEditValueForApi = null;
       }
-      // Compara com a data original (que também deve ser ISO string ou null)
-      const originalIsoDate = originalDocument.expiryDate ? new Date(originalDocument.expiryDate).toISOString() : null;
-      if (apiDateValue !== originalIsoDate) {
-        updatePayload.expiryDate = apiDateValue;
+
+      if (processedEditValueForApi !== originalValueFromDoc) {
+        updatePayload.expiryDate = processedEditValueForApi;
         updatePayload.updateExpiryDate = true;
         valueHasChanged = true;
       }
     } else if (field === 'notes') {
-      // Permite string vazia ou null. Se o input está vazio, consideramos null.
-      processedEditValue = (processedEditValue && processedEditValue.trim() !== '') ? processedEditValue : null;
-      if (originalFieldValue !== processedEditValue) {
-        updatePayload.notes = processedEditValue;
+      const currentNotes = (typeof editValue === 'string' ? editValue.trim() : null) || null;
+      originalValueFromDoc = originalDocument.notes || null; // Original normalizado para null se undefined
+
+      if (originalValueFromDoc !== currentNotes) {
+        updatePayload.notes = currentNotes;
         updatePayload.updateNotes = true;
         valueHasChanged = true;
       }
     }
 
     if (valueHasChanged && (updatePayload.updateDisplayName || updatePayload.updateExpiryDate || updatePayload.updateNotes)) {
-      setIsSubmitting(true); // Loading específico para esta ação
-      setError(null);
+      setIsSubmitting(true); setError(null);
       try {
         const updatedDoc = await updateDocumentMetadata(docId, updatePayload);
         setDocuments(prevDocs =>
@@ -195,17 +222,21 @@ const DashboardPage: React.FC = () => {
         setIsSubmitting(false);
       }
     } else {
-      console.log("Nenhuma alteração real detectada para salvar ou nenhuma flag de update.");
+      if (!valueHasChanged) {
+        console.log(`Valor para ${field} não alterado, não salvando.`);
+      } else {
+        console.log("Nenhuma propriedade marcada para atualização no payload (nenhuma flag 'updateXyz' é true).");
+      }
     }
 
     setEditingCell(null);
-    setEditValue('');
+    setEditValue(''); // Sempre limpa o valor de edição ao sair do modo de edição
   };
 
   const handleEditKeyDown = (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     if (e.key === 'Enter') {
-      if (e.currentTarget.tagName.toLowerCase() === 'textarea' && !e.shiftKey) { // Para textarea, Enter salva, Shift+Enter nova linha
-        e.preventDefault(); // Previne nova linha se não for Shift+Enter
+      if (e.currentTarget.tagName.toLowerCase() === 'textarea' && !e.shiftKey) {
+        e.preventDefault();
         handleEditSave();
       } else if (e.currentTarget.tagName.toLowerCase() !== 'textarea') {
         handleEditSave();
@@ -218,17 +249,14 @@ const DashboardPage: React.FC = () => {
 
   const handleDeleteDocument = async (docId: string, docName: string) => {
     if (window.confirm(`Tem certeza que deseja excluir o registro de "${docName}"? Esta ação não apaga o arquivo do seu computador.`)) {
-      setIsSubmitting(true);
-      setError(null);
+      setIsSubmitting(true); setError(null);
       try {
         await deleteDocumentMetadata(docId);
         setDocuments(prevDocs => prevDocs.filter(doc => doc.id !== docId));
       } catch (err) {
         console.error(`Erro ao excluir documento ${docId}:`, err);
         setError("Falha ao excluir o documento.");
-      } finally {
-        setIsSubmitting(false);
-      }
+      } finally { setIsSubmitting(false); }
     }
   };
 
@@ -259,7 +287,7 @@ const DashboardPage: React.FC = () => {
           cursor: 'pointer'
         }}
       >
-        <input {...getInputProps()} />
+        <input {...getInputProps()} /> {/* getInputProps e isDragActive são usados aqui */}
         {isDragActive ? (
           <p>Solte os arquivos aqui para registrar...</p>
         ) : (
@@ -276,7 +304,7 @@ const DashboardPage: React.FC = () => {
           <ul style={{ listStyleType: 'none', paddingLeft: 0 }}>
             {upcomingDocuments.map(doc => (
               <li key={`upcoming-${doc.id}`} style={{ padding: '8px 0', borderBottom: '1px solid #ffeeba' }}>
-                <strong>{doc.displayName}</strong> - Vence em: {new Date(doc.expiryDate!).toLocaleDateString()}
+                <strong>{doc.displayName}</strong> - Vence em: {displayFormattedDate(doc.expiryDate)}
               </li>
             ))}
           </ul>
@@ -284,7 +312,7 @@ const DashboardPage: React.FC = () => {
       )}
 
       <h3>Todos os Documentos</h3>
-      {documents.length === 0 && !isLoading ? (
+      {(documents.length === 0 && !isLoading) ? ( // Parênteses adicionados para clareza
         <p>Nenhum documento registrado. Arraste arquivos para a área acima para começar.</p>
       ) : (
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9em' }}>
@@ -298,63 +326,47 @@ const DashboardPage: React.FC = () => {
             </tr>
           </thead>
           <tbody>
-            {documents.map((doc) => (
+            {documents.map((doc) => ( // docId e docName são usados em handleDeleteDocument
               <tr key={doc.id} style={{ borderBottom: '1px solid #eee' }}>
                 <td style={{ padding: '10px 8px' }} onDoubleClick={() => handleCellDoubleClick(doc.id, 'displayName', doc.displayName)}>
                   {editingCell?.docId === doc.id && editingCell?.field === 'displayName' ? (
                     <input
                       ref={editingCell.field === 'displayName' ? inputRef as React.RefObject<HTMLInputElement> : null}
-                      type="text"
-                      value={editValue}
-                      onChange={handleEditChange}
-                      onBlur={handleEditSave}
-                      onKeyDown={handleEditKeyDown}
+                      type="text" value={editValue} onChange={handleEditChange}
+                      onBlur={handleEditSave} onKeyDown={handleEditKeyDown}
                       style={{ width: '95%', padding: '6px', boxSizing: 'border-box' }}
                     />
-                  ) : (
-                    doc.displayName
-                  )}
+                  ) : (doc.displayName)}
                 </td>
                 <td style={{ padding: '10px 8px' }} onDoubleClick={() => handleCellDoubleClick(doc.id, 'expiryDate', doc.expiryDate)}>
                   {editingCell?.docId === doc.id && editingCell?.field === 'expiryDate' ? (
                     <input
                       ref={editingCell.field === 'expiryDate' ? inputRef as React.RefObject<HTMLInputElement> : null}
-                      type="date"
-                      value={editValue} // editValue já está como YYYY-MM-DD ou ''
-                      onChange={handleEditChange}
-                      onBlur={handleEditSave}
+                      type="date" value={editValue}
+                      onChange={handleEditChange} onBlur={handleEditSave}
                       onKeyDown={handleEditKeyDown}
                       style={{ width: '95%', padding: '6px', boxSizing: 'border-box' }}
                     />
                   ) : (
-                    doc.expiryDate ? new Date(doc.expiryDate).toLocaleDateString() : 'N/A'
+                    displayFormattedDate(doc.expiryDate)
                   )}
                 </td>
                 <td style={{ padding: '10px 8px' }}>{doc.originalFileName}</td>
-                {/* <td style={{ padding: '10px 8px' }}>{doc.originalFileType || 'N/A'}</td> */}
                 <td style={{ padding: '10px 8px' }} onDoubleClick={() => handleCellDoubleClick(doc.id, 'notes', doc.notes)}>
                   {editingCell?.docId === doc.id && editingCell?.field === 'notes' ? (
                     <textarea
                       ref={editingCell.field === 'notes' ? inputRef as React.RefObject<HTMLTextAreaElement> : null}
-                      value={editValue}
-                      onChange={handleEditChange}
-                      onBlur={handleEditSave}
-                      onKeyDown={handleEditKeyDown}
-                      rows={2}
-                      style={{ width: '95%', padding: '6px', boxSizing: 'border-box', minHeight: '40px' }}
+                      value={editValue} onChange={handleEditChange}
+                      onBlur={handleEditSave} onKeyDown={handleEditKeyDown}
+                      rows={2} style={{ width: '95%', padding: '6px', boxSizing: 'border-box', minHeight: '40px' }}
                     />
-                  ) : (
-                    doc.notes || '---'
-                  )}
+                  ) : (doc.notes || '---')}
                 </td>
                 <td style={{ padding: '10px 8px' }}>
-                  <span
-                    onClick={() => handleDeleteDocument(doc.id, doc.displayName)}
+                  <span onClick={() => handleDeleteDocument(doc.id, doc.displayName)} // docId e docName usados aqui
                     style={{ color: 'red', cursor: 'pointer', textDecoration: 'underline' }}
                     title="Excluir registro deste documento"
-                  >
-                    Excluir
-                  </span>
+                  >Excluir</span>
                 </td>
               </tr>
             ))}
@@ -362,7 +374,7 @@ const DashboardPage: React.FC = () => {
         </table>
       )}
       {isLoading && documents.length > 0 && <p>Atualizando lista...</p>}
-      {isSubmitting && <p>Salvando alterações...</p>}
+      {isSubmitting && !isLoading && <p>Salvando alterações...</p>} {/* Ajustado para não sobrepor o loading principal */}
     </div>
   );
 };
