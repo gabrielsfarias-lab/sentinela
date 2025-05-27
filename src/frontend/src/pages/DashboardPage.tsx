@@ -131,7 +131,11 @@ const DashboardPage: React.FC = () => {
   useEffect(() => {
     if (editingCell && inputRef.current) {
       inputRef.current.focus();
-      inputRef.current.select();
+
+      if (inputRef.current.tagName.toLowerCase() === 'input' && (inputRef.current as HTMLInputElement).type === 'text' ||
+        inputRef.current.tagName.toLowerCase() === 'textarea') {
+        (inputRef.current as HTMLInputElement | HTMLTextAreaElement).select();
+      }
     }
   }, [editingCell]);
 
