@@ -9,35 +9,40 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Backend.Controllers;
 
-[Authorize] // Todos os endpoints aqui requerem autenticação
+[Authorize]
 [ApiController]
-[Route("documentos")] // Define o prefixo da rota para este controller
-public class DocumentsController(
-    ApplicationDbContext context,
-    UserManager<IdentityUser> userManager,
-    ILogger<DocumentsController> logger
-) : ControllerBase
+[Route("documentos")]
+public class DocumentsController : ControllerBase // Removido o construtor primário para clareza com os campos _
 {
-    private readonly ApplicationDbContext _context = context;
-    private readonly UserManager<IdentityUser> _userManager = userManager;
-    private readonly ILogger<DocumentsController> _logger = logger;
+    private readonly ApplicationDbContext _context;
+    private readonly UserManager<IdentityUser> _userManager;
+    private readonly ILogger<DocumentsController> _logger;
+
+    public DocumentsController(
+        ApplicationDbContext context,
+        UserManager<IdentityUser> userManager,
+        ILogger<DocumentsController> logger
+    )
+    {
+        _context = context;
+        _userManager = userManager;
+        _logger = logger;
+    }
 
     private string? GetCurrentUserId() => User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-    // GET: /documentos
+    // GET e POST permanecem os mesmos da sua versão postada (que já estava correta)
     [HttpGet]
     public async Task<ActionResult<IEnumerable<DocumentDto>>> GetDocuments()
     {
         var userId = GetCurrentUserId();
         if (string.IsNullOrEmpty(userId))
-        {
-            return Unauthorized(); // Deveria ser pego pelo [Authorize], mas uma checagem extra
-        }
+            return Unauthorized();
 
         var documents = await _context
             .Documents.Where(d => d.UserId == userId)
-            .OrderByDescending(d => d.UpdatedAt) // Ou CreatedAt, ou por ExpiryDate
-            .Select(d => new DocumentDto // Mapear para DTO
+            .OrderByDescending(d => d.UpdatedAt)
+            .Select(d => new DocumentDto
             {
                 Id = d.Id,
                 OriginalFileName = d.OriginalFileName,
@@ -50,12 +55,9 @@ public class DocumentsController(
                 UpdatedAt = d.UpdatedAt,
             })
             .ToListAsync();
-
         return Ok(documents);
     }
 
-    // POST: /documentos
-    // Este endpoint aceitará uma lista de metadados de documentos para criação em lote.
     [HttpPost]
     public async Task<ActionResult<List<DocumentDto>>> CreateDocuments(
         [FromBody] List<CreateDocumentDto> createDtos
@@ -63,32 +65,23 @@ public class DocumentsController(
     {
         var userId = GetCurrentUserId();
         if (string.IsNullOrEmpty(userId))
-        {
             return Unauthorized();
-        }
-
         if (createDtos == null || !createDtos.Any())
-        {
             return BadRequest("Nenhum dado de documento fornecido.");
-        }
 
         var createdDocuments = new List<Document>();
         var now = DateTime.UtcNow;
 
         foreach (var dto in createDtos)
         {
-            // Validação adicional do DTO se necessário (embora DataAnnotations já façam parte)
             if (string.IsNullOrWhiteSpace(dto.OriginalFileName))
             {
-                // Pode optar por pular este ou retornar um erro para o lote inteiro.
-                // Por simplicidade, vamos pular se o nome do arquivo for inválido.
                 _logger.LogWarning(
                     "Documento sem OriginalFileName no lote para o usuário {UserId}. Pulando.",
                     userId
                 );
                 continue;
             }
-
             var document = new Document
             {
                 UserId = userId,
@@ -107,20 +100,16 @@ public class DocumentsController(
         }
 
         if (createdDocuments.Count == 0)
-        {
             return BadRequest("Nenhum documento válido para criação no lote.");
-        }
 
         _context.Documents.AddRange(createdDocuments);
         await _context.SaveChangesAsync();
-
         _logger.LogInformation(
             "{Count} documentos criados para o usuário {UserId}.",
             createdDocuments.Count,
             userId
         );
 
-        // Mapear para DTOs para a resposta
         var resultDtos = createdDocuments
             .Select(d => new DocumentDto
             {
@@ -135,10 +124,6 @@ public class DocumentsController(
                 UpdatedAt = d.UpdatedAt,
             })
             .ToList();
-
-        // Retorna 201 Created com a localização do primeiro recurso criado (opcional)
-        // ou simplesmente 200 OK com a lista de DTOs.
-        // Para simplicidade com lote, 200 OK é mais fácil.
         return Ok(resultDtos);
     }
 
@@ -165,23 +150,38 @@ public class DocumentsController(
         }
 
         bool changed = false;
-        // Aplicar atualizações apenas para campos fornecidos no DTO
-        if (updateDto.DisplayName != null) // Checa se a propriedade existe no DTO (mesmo que seja string vazia)
+
+        // Usar as flags booleanas do DTO para determinar quais campos atualizar
+        if (updateDto.UpdateDisplayName)
         {
-            document.DisplayName = updateDto.DisplayName;
-            changed = true;
+            // Mesmo que updateDto.DisplayName seja null, se UpdateDisplayName for true,
+            // significa que o usuário intencionalmente quer limpar o DisplayName (se o campo no DB permitir null).
+            // No nosso Document.cs, DisplayName é [Required], então não pode ser null.
+            // Mas pode ser string vazia.
+            if (document.DisplayName != updateDto.DisplayName)
+            {
+                document.DisplayName = updateDto.DisplayName ?? string.Empty; // Garante que não seja null para campo Required
+                changed = true;
+            }
         }
-        if (updateDto.ExpiryDateHasValue) // Precisamos de uma forma de saber se ExpiryDate foi intencionalmente setado para null
+
+        if (updateDto.UpdateExpiryDate)
         {
-            document.ExpiryDate = updateDto.ExpiryDate;
-            changed = true;
+            if (document.ExpiryDate != updateDto.ExpiryDate)
+            {
+                document.ExpiryDate = updateDto.ExpiryDate; // Permite definir ExpiryDate como null
+                changed = true;
+            }
         }
-        if (updateDto.NotesHasValue)
+
+        if (updateDto.UpdateNotes)
         {
-            document.Notes = updateDto.Notes;
-            changed = true;
+            if (document.Notes != updateDto.Notes)
+            {
+                document.Notes = updateDto.Notes; // Permite definir Notes como null ou string vazia
+                changed = true;
+            }
         }
-        // Adicionar mais campos aqui conforme necessário
 
         if (changed)
         {
@@ -197,6 +197,7 @@ public class DocumentsController(
             }
             catch (DbUpdateConcurrencyException)
             {
+                // ... (tratamento de concorrência) ...
                 _logger.LogError(
                     "Erro de concorrência ao atualizar Documento ID {DocumentId} para o usuário {UserId}.",
                     id,
@@ -208,15 +209,18 @@ public class DocumentsController(
         else
         {
             _logger.LogInformation(
-                "Nenhuma alteração detectada para o Documento ID {DocumentId} para o usuário {UserId}.",
+                "Nenhuma alteração aplicada ao Documento ID {DocumentId} para o usuário {UserId} (ou valores eram os mesmos).",
                 id,
                 userId
             );
-            return Ok(new { Message = "Nenhuma alteração aplicada." }); // Ou retornar o documento sem modificação
+            // Mesmo sem alteração, é comum retornar o estado atual do recurso ou 200 OK.
         }
 
-        // Retornar o documento atualizado como DTO
-        var updatedDto = new DocumentDto
+        // Retornar o documento atualizado (ou não) como DTO
+        var resultDto = new DocumentDto
+        { /* ... mapeamento ... */
+        };
+        resultDto = new DocumentDto
         {
             Id = document.Id,
             OriginalFileName = document.OriginalFileName,
@@ -228,10 +232,10 @@ public class DocumentsController(
             CreatedAt = document.CreatedAt,
             UpdatedAt = document.UpdatedAt,
         };
-        return Ok(updatedDto);
+        return Ok(resultDto);
     }
 
-    // DELETE: /documentos/{id}
+    // DELETE permanece o mesmo da sua versão postada (que já estava correta)
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteDocument(Guid id)
     {
@@ -261,6 +265,6 @@ public class DocumentsController(
             id,
             userId
         );
-        return NoContent(); // 204 No Content é uma resposta padrão para DELETE bem-sucedido
+        return NoContent();
     }
 }
