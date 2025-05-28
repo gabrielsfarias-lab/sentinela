@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/UseAuthHooks'
 import { useNavigate, Link, useLocation } from 'react-router-dom'; // Adicionar useLocation
+import { handleApiServiceError } from '../utils/errorHandler';
 
 const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -19,13 +20,9 @@ const LoginPage: React.FC = () => {
       const from = location.state?.from?.pathname || "/dashboard";
       navigate(from, { replace: true });
 
-    } catch (err: any) {
-      if (err.response && err.response.data && err.response.data.message) {
-        setError(err.response.data.message);
-      } else {
-        setError(err.message || 'Falha no login. Verifique suas credenciais.');
-      }
-      console.error("Login error:", err);
+    } catch (err: unknown) {
+      const friendlyError = handleApiServiceError(err, 'Falha no login. Verifique suas credenciais.');
+      setError(friendlyError);
     }
   };
 

@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { changePassword, type ChangePasswordData } from '../services/AuthService';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/UseAuthHooks';
+import { handleApiServiceError } from '../utils/errorHandler';
 
 const ChangePasswordPage: React.FC = () => {
   const [currentPassword, setCurrentPassword] = useState('');
@@ -41,31 +42,17 @@ const ChangePasswordPage: React.FC = () => {
       setConfirmNewPassword('');
 
       setTimeout(() => {
-        if (logout) { // Verifica se logout está definido
-          logout({ navigate }); // Chama o logout do AuthContext, passando a função navigate
+        if (logout) {
+          logout({ navigate });
         } else {
-          // Fallback caso logout não esteja disponível por algum motivo (improvável)
           console.error("Função logout não encontrada no AuthContext.");
-          navigate('/login', { replace: true }); // Redirecionamento manual como fallback
+          navigate('/login', { replace: true });
         }
-      }, 3000); // 3 segundos de delay
+      }, 3000);
 
-    } catch (err: any) {
-      if (err.response && err.response.data) {
-        if (err.response.data.message) {
-          setError(err.response.data.message);
-        } else if (err.response.data.errors) {
-          const messages = Object.values(err.response.data.errors).flat();
-          setError(messages.join(' '));
-        } else if (typeof err.response.data === 'string') {
-          setError(err.response.data)
-        } else {
-          setError('Falha ao alterar a senha. Verifique os dados e tente novamente.');
-        }
-      } else {
-        setError('Ocorreu um erro desconhecido. Tente novamente mais tarde.');
-      }
-      console.error("Change Password error:", err);
+    } catch (err: unknown) {
+      const friendlyError = handleApiServiceError(err, 'Falha ao alterar a senha. Verifique os dados e tente novamente.');
+      setError(friendlyError);
     } finally {
       setIsLoading(false);
     }

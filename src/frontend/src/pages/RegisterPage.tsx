@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { register as apiRegister } from '../services/AuthService';
+import { handleApiServiceError } from '../utils/errorHandler';
 
 
 const RegisterPage: React.FC = () => {
@@ -27,21 +28,9 @@ const RegisterPage: React.FC = () => {
       setSuccessMessage(response.message || "Cadastro realizado! Você pode fazer login agora.");
       // Opcional: redirecionar para login após um tempo ou limpar campos
       // navigate('/login');
-    } catch (err: any) {
-      if (err.response && err.response.data) {
-        if (typeof err.response.data === 'string') {
-          setError(err.response.data);
-        } else if (err.response.data.errors) { // Para erros de ModelState
-          const messages = Object.values(err.response.data.errors).flat();
-          setError(messages.join(' '));
-        } else if (err.response.data.message) {
-          setError(err.response.data.message);
-        } else {
-          setError('Falha no cadastro. Verifique os dados.');
-        }
-      } else {
-        setError(err.message || 'Falha no cadastro.');
-      }
+    } catch (err: unknown) {
+      const friendlyError = handleApiServiceError(err, 'Falha no login. Verifique suas credenciais.');
+      setError(friendlyError);
     } finally {
       setIsLoading(false);
     }

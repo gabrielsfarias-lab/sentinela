@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo, type JSX } from 'react';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/UseAuthHooks';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   getDocuments,
@@ -14,16 +14,10 @@ import { format, parseISO, isValid, parse as parseDateFns } from 'date-fns';
 import { toZonedTime, fromZonedTime } from 'date-fns-tz';
 import { toast } from 'react-toastify';
 import axios, { AxiosError } from 'axios';
-
-// --- IMPORTAR OS NOVOS COMPONENTES ---
 import DocumentTable from '../components/dashboard/DocumentTable';
 import DocumentDropzone from '../components/dashboard/DocumentDropzone';
 import UpcomingExpiries from '../components/dashboard/UpcomingExpiries';
-// --- FIM DA IMPORTAÇÃO ---
-
-// --- IMPORTAR TIPOS COMPARTILHADOS ---
 import { type EditingCell, type SortConfig, type SortableKeys } from '../types/dashboardTypes';
-// --- FIM DA IMPORTAÇÃO DE TIPOS ---
 
 interface ApiErrorData {
   message?: string;

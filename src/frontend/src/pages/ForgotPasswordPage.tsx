@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { forgotPassword, type ForgotPasswordData } from '../services/AuthService'; // Caminho corrigido
+import { handleApiServiceError } from '../utils/errorHandler';
 
 const ForgotPasswordPage: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -23,17 +24,9 @@ const ForgotPasswordPage: React.FC = () => {
         // Não precisa adicionar ao message, o backend já tem uma mensagem para dev
       }
       setEmail(''); // Limpar o campo após o sucesso
-    } catch (err: any) {
-      if (err.response && err.response.data && err.response.data.message) {
-        setError(err.response.data.message);
-      } else if (err.response && err.response.data && err.response.data.errors) {
-        const messages = Object.values(err.response.data.errors).flat();
-        setError(messages.join(' '));
-      }
-      else {
-        setError('Falha ao solicitar recuperação de senha. Tente novamente mais tarde.');
-      }
-      console.error("Forgot Password error:", err);
+    } catch (err: unknown) {
+      const friendlyError = handleApiServiceError(err, 'Falha ao solicitar recuperação de senha.');
+      setError(friendlyError);
     } finally {
       setIsLoading(false);
     }
@@ -58,8 +51,8 @@ const ForgotPasswordPage: React.FC = () => {
           />
         </div>
 
-        {error && <p style={{ color: 'red', marginBottom: '15px', fontSize: '0.9em'  }}>{error}</p>}
-        {message && <p style={{ color: 'green', marginBottom: '15px', fontSize: '0.9em'  }}>{message}</p>}
+        {error && <p style={{ color: 'red', marginBottom: '15px', fontSize: '0.9em' }}>{error}</p>}
+        {message && <p style={{ color: 'green', marginBottom: '15px', fontSize: '0.9em' }}>{message}</p>}
 
         <button type="submit" disabled={isLoading} style={{ width: '100%', padding: '10px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
           {isLoading ? 'Enviando...' : 'Enviar Link de Recuperação'}

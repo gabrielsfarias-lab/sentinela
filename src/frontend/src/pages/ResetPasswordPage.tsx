@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { resetPassword, type ResetPasswordData } from '../services/AuthService'; // Caminho corrigido
+import { handleApiServiceError } from '../utils/errorHandler';
 
 const ResetPasswordPage: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -37,8 +38,8 @@ const ResetPasswordPage: React.FC = () => {
     setMessage(null);
 
     if (isLinkInvalid) {
-        setError("Não é possível prosseguir, o link é inválido.");
-        return;
+      setError("Não é possível prosseguir, o link é inválido.");
+      return;
     }
 
     if (newPassword !== confirmNewPassword) {
@@ -62,32 +63,24 @@ const ResetPasswordPage: React.FC = () => {
       setMessage(response.message + " Você será redirecionado para o login em breve.");
       setNewPassword('');
       setConfirmNewPassword('');
-      setTimeout(() => navigate('/login'), 4000); // Redireciona após mostrar a mensagem
-    } catch (err: any) {
-      if (err.response && err.response.data && err.response.data.message) {
-        setError(err.response.data.message);
-      } else if (err.response && err.response.data && err.response.data.errors) {
-        const messages = Object.values(err.response.data.errors).flat();
-        setError(messages.join(' '));
-      }
-       else {
-        setError('Falha ao redefinir a senha. O link pode ter expirado ou a senha não atende aos critérios.');
-      }
-      console.error("Reset Password error:", err);
+      setTimeout(() => navigate('/login'), 4000);
+    } catch (err: unknown) {
+      const friendlyError = handleApiServiceError(err, 'Falha ao redefinir a senha. O link pode ter expirado ou a senha não atende aos critérios.');
+      setError(friendlyError);
     } finally {
       setIsLoading(false);
     }
   };
 
   if (isLinkInvalid && error) {
-      return (
-        <div style={{ maxWidth: '400px', margin: '50px auto', padding: '20px', border: '1px solid #ccc', borderRadius: '8px', textAlign: 'center' }}>
-            <h2 style={{color: 'red'}}>Link Inválido</h2>
-            <p style={{ color: 'red', marginBottom: '15px' }}>{error}</p>
-            <Link to="/forgot-password" style={{ color: '#007bff' }}>Solicitar novo link</Link> <br/>
-            <Link to="/login" style={{ color: '#007bff', marginTop: '10px', display: 'inline-block' }}>Voltar para Login</Link>
-        </div>
-      );
+    return (
+      <div style={{ maxWidth: '400px', margin: '50px auto', padding: '20px', border: '1px solid #ccc', borderRadius: '8px', textAlign: 'center' }}>
+        <h2 style={{ color: 'red' }}>Link Inválido</h2>
+        <p style={{ color: 'red', marginBottom: '15px' }}>{error}</p>
+        <Link to="/forgot-password" style={{ color: '#007bff' }}>Solicitar novo link</Link> <br />
+        <Link to="/login" style={{ color: '#007bff', marginTop: '10px', display: 'inline-block' }}>Voltar para Login</Link>
+      </div>
+    );
   }
 
   return (
@@ -136,7 +129,7 @@ const ResetPasswordPage: React.FC = () => {
       </form>
       {!message && ( // Não mostrar o link de login se uma mensagem de sucesso já estiver sendo exibida
         <p style={{ marginTop: '20px', textAlign: 'center' }}>
-            <Link to="/login" style={{ color: '#007bff' }}>Voltar para Login</Link>
+          <Link to="/login" style={{ color: '#007bff' }}>Voltar para Login</Link>
         </p>
       )}
     </div>
