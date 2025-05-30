@@ -10,6 +10,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@mantine/core": "^8.0.2",
+    "@mantine/form": "^8.0.2",
+    "@mantine/hooks": "^8.0.2",
+    "@tabler/icons-react": "^3.33.0",
     "@types/react-router-dom": "^5.3.3",
     "axios": "^1.9.0",
     "date-fns": "^4.1.0",
