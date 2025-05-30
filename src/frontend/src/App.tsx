@@ -4,33 +4,35 @@ import RegisterPage from './pages/RegisterPage';
 import DashboardPage from './pages/DashboardPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
-import ChangePasswordPage from './pages/ChangePasswordPage'; // --- NOVA IMPORTAÇÃO ---
+import ChangePasswordPage from './pages/ChangePasswordPage';
 import PrivateRoute from './components/PrivateRoute';
+import MainLayout from './components/layout/MainLayout';
 
 function App() {
   return (
-    <Routes>
-      {/* Rotas Públicas */}
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/cadastro" element={<RegisterPage />} />
-      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-      <Route path="/reset-password" element={<ResetPasswordPage />} />
+    <MainLayout>
+      <Routes>
+        {/* Rotas Públicas */}
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/cadastro" element={<RegisterPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
 
-      {/* Rotas Privadas */}
-      <Route path="/dashboard" element={
-        <PrivateRoute>
-          <DashboardPage />
-        </PrivateRoute>
-      } />
-      <Route path="/account/change-password" element={
-        <PrivateRoute>
-          <ChangePasswordPage />
-        </PrivateRoute>
-      } />
+        {/* Rotas Privadas */}
+        <Route path="/dashboard" element={
+          <PrivateRoute>
+            <DashboardPage />
+          </PrivateRoute>
+        } />
+        <Route path="/account/change-password" element={
+          <PrivateRoute>
+            <ChangePasswordPage />
+          </PrivateRoute>
+        } />
 
-      {/* Rota padrão pode ser o login ou um redirect para dashboard se logado */}
-      <Route path="*" element={<LoginPage />} />
-    </Routes>
+        <Route path="*" element={<LoginPage />} />
+      </Routes>
+    </MainLayout>
   );
 }
 export default App;

@@ -1,25 +1,25 @@
 import React, { useState } from 'react';
-import { useAuth } from '../contexts/UseAuthHooks'
-import { useNavigate, Link, useLocation } from 'react-router-dom'; // Adicionar useLocation
+import { useAuth } from '../contexts/UseAuthHooks';
+import { useNavigate, Link as RouterLink, useLocation } from 'react-router-dom';
 import { handleApiServiceError } from '../utils/errorHandler';
+import { TextInput, PasswordInput, Button, Paper, Title, Text, Anchor, Stack, LoadingOverlay, Alert } from '@mantine/core';
+import { IconAlertCircle } from '@tabler/icons-react';
 
 const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const { login, isLoading } = useAuth();
+  const { login, isLoading: isAuthOperationLoading } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation(); // Para redirecionar de volta após login, se aplicável
+  const location = useLocation();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     try {
       await login({ email, password });
-
       const from = location.state?.from?.pathname || "/dashboard";
       navigate(from, { replace: true });
-
     } catch (err: unknown) {
       const friendlyError = handleApiServiceError(err, 'Falha no login. Verifique suas credenciais.');
       setError(friendlyError);
@@ -27,47 +27,57 @@ const LoginPage: React.FC = () => {
   };
 
   return (
-    <div style={{ maxWidth: '400px', margin: '50px auto', padding: '20px', border: '1px solid #ccc', borderRadius: '8px' }}>
-      <h2>Login</h2>
+    // O Paper agora é o filho direto do Box centralizador no MainLayout.
+    // Ele define sua própria largura máxima.
+    <Paper
+      withBorder
+      shadow="md"
+      p={30}
+      radius="md"
+      style={{ maxWidth: 420, width: '100%' }} // mx="auto" não é estritamente necessário aqui
+    // pois o pai flex já centraliza.
+    >
+      <LoadingOverlay visible={isAuthOperationLoading} overlayProps={{ blur: 2 }} />
+      <Title order={2} ta="center" mb="xl">
+        Login
+      </Title>
+
+      {error && (
+        <Alert icon={<IconAlertCircle size="1rem" />} title="Erro de Login" color="red" withCloseButton onClose={() => setError(null)} mb="md">
+          {error}
+        </Alert>
+      )}
+
       <form onSubmit={handleSubmit}>
-        <div style={{ marginBottom: '15px' }}>
-          <label htmlFor="email" style={{ display: 'block', marginBottom: '5px' }}>Email:</label>
-          <input
-            type="email"
-            id="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            autoComplete="email"
-            style={{ width: '100%', padding: '10px', boxSizing: 'border-box', borderRadius: '4px', border: '1px solid #ddd' }}
+        <Stack gap="md">
+          <TextInput
+            required label="Email" placeholder="seu@email.com"
+            value={email} onChange={(event) => setEmail(event.currentTarget.value)}
+            autoComplete="email" error={!!error}
           />
-        </div>
-        <div style={{ marginBottom: '20px' }}>
-          <label htmlFor="password" style={{ display: 'block', marginBottom: '5px' }}>Senha:</label>
-          <input
-            type="password"
-            id="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            autoComplete="current-password"
-            style={{ width: '100%', padding: '10px', boxSizing: 'border-box', borderRadius: '4px', border: '1px solid #ddd' }}
+          <PasswordInput
+            required label="Senha" placeholder="Sua senha"
+            value={password} onChange={(event) => setPassword(event.currentTarget.value)}
+            autoComplete="current-password" error={!!error}
           />
-        </div>
-        {error && <p style={{ color: 'red', marginBottom: '15px', fontSize: '0.9em' }}>{error}</p>}
-        <button type="submit" disabled={isLoading} style={{ width: '100%', padding: '10px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
-          {isLoading ? 'Entrando...' : 'Entrar'}
-        </button>
+          <Button type="submit" fullWidth mt="md" loading={isAuthOperationLoading}>
+            Entrar
+          </Button>
+        </Stack>
       </form>
-      <div style={{ marginTop: '20px', textAlign: 'center', fontSize: '0.9em' }}>
-        <p style={{ marginBottom: '10px' }}>
-          <Link to="/forgot-password" style={{ color: '#007bff' }}>Esqueceu a senha?</Link>
-        </p>
-        <p>
-          Não tem conta? <Link to="/cadastro" style={{ color: '#007bff' }}>Cadastre-se</Link>
-        </p>
-      </div>
-    </div>
+
+      <Text c="dimmed" size="sm" ta="center" mt="lg">
+        <Anchor component={RouterLink} to="/forgot-password" size="sm" inherit>
+          Esqueceu a senha?
+        </Anchor>
+      </Text>
+      <Text c="dimmed" size="sm" ta="center" mt="xs">
+        Não tem conta?{' '}
+        <Anchor component={RouterLink} to="/cadastro" size="sm" inherit>
+          Cadastre-se
+        </Anchor>
+      </Text>
+    </Paper>
   );
 };
 export default LoginPage;
